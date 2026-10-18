@@ -26,11 +26,12 @@ static struct zmk_widget_dongle_battery_status dongle_battery_status_widget;
 static struct zmk_widget_layer_status layer_status_widget;
 #endif
 
-#if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_MODIFIERS)
-static struct zmk_widget_modifiers modifiers_widget;
-#if IS_ENABLED(CONFIG_ZMK_HID_INDICATORS)
-static struct zmk_widget_hid_indicators hid_indicators_widget;
-#endif
+   #if !defined(ZMK_SPLIT_BLE_PERIPHERAL_COUNT) && IS_ENABLED(CONFIG_ZMK_SPLIT_ESB)
+   /* ESB transport: one battery row per pipe declared under esb_link/peripherals.
+    * The ESB module raises zmk_peripheral_battery_state_changed with source = pipe index. */
+   #  define ZMK_SPLIT_BLE_PERIPHERAL_COUNT \
+         DT_CHILD_NUM_STATUS_OKAY(DT_CHILD(DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_split_esb), peripherals))
+   #endif
 
 #endif
 

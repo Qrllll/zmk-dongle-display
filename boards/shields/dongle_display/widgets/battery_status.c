@@ -133,9 +133,36 @@ static void set_battery_symbol(lv_obj_t *widget, struct battery_state state) {
     }
 }
 
+/* The ZMK widget listener keeps ONE pending state per widget: if two events arrive
+ * before the display thread runs (e.g. both halves dropping together), the earlier
+ * state is overwritten and never drawn, leaving a stale row. So every event stores
+ * its result in a per-row table, and the update callback redraws all rows from it. */
+#define ROW_COUNT (ZMK_SPLIT_BLE_PERIPHERAL_COUNT + SOURCE_OFFSET)
+
+static struct battery_state rows[ROW_COUNT + 1];
+static K_MUTEX_DEFINE(rows_mutex);
+
+static void rows_store(struct battery_state state) {
+    if (state.source >= ROW_COUNT) {
+        return;
+    }
+    k_mutex_lock(&rows_mutex, K_FOREVER);
+    rows[state.source] = state;
+    k_mutex_unlock(&rows_mutex);
+}
+
 void battery_status_update_cb(struct battery_state state) {
+    ARG_UNUSED(state);
     struct zmk_widget_dongle_battery_status *widget;
-    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) { set_battery_symbol(widget->obj, state); }
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node) {
+        for (int i = 0; i < ROW_COUNT; i++) {
+            k_mutex_lock(&rows_mutex, K_FOREVER);
+            struct battery_state row = rows[i];
+            k_mutex_unlock(&rows_mutex);
+            row.source = i;
+            set_battery_symbol(widget->obj, row);
+        }
+    }
 }
 
 static struct battery_state peripheral_battery_status_get_state(const zmk_event_t *eh) {
@@ -181,7 +208,7 @@ static struct battery_state central_battery_status_get_state(const zmk_event_t *
     };
 }
 
-static struct battery_state battery_status_get_state(const zmk_event_t *eh) { 
+static struct battery_state battery_status_compute_state(const zmk_event_t *eh) {
     if (as_zmk_peripheral_battery_state_changed(eh) != NULL) {
         return peripheral_battery_status_get_state(eh);
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ESB)
@@ -191,6 +218,19 @@ static struct battery_state battery_status_get_state(const zmk_event_t *eh) {
     } else {
         return central_battery_status_get_state(eh);
     }
+}
+
+static struct battery_state battery_status_get_state(const zmk_event_t *eh) {
+    struct battery_state state = battery_status_compute_state(eh);
+    bool from_peripheral = as_zmk_peripheral_battery_state_changed(eh) != NULL;
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ESB)
+    from_peripheral = from_peripheral || as_zmk_split_esb_peripheral_changed(eh) != NULL;
+#endif
+    /* Without the dongle row, the central state (source 0) must not land on peripheral 0's row. */
+    if (from_peripheral || SOURCE_OFFSET > 0) {
+        rows_store(state);
+    }
+    return state;
 }
 
 ZMK_DISPLAY_WIDGET_LISTENER(widget_dongle_battery_status, struct battery_state,

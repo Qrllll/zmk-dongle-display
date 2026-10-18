@@ -33,6 +33,11 @@ config ZMK_DONGLE_DISPLAY_MODIFIERS
     bool "Display the modifiers widget"
     default y
 
+config ZMK_DONGLE_DISPLAY_HID_INDICATORS
+    bool "Display the active HID indicators (CLCK, NLCK, SLCK)"
+    default y
+    depends on ZMK_HID_INDICATORS
+
 config ZMK_DONGLE_DISPLAY_LAYER
     bool "Display the highest layer widget"
     default y

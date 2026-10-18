@@ -207,6 +207,22 @@ int zmk_widget_output_status_init(struct zmk_widget_output_status *widget, lv_ob
     lv_obj_t *usb_hid_status = lv_img_create(widget->obj);
     lv_obj_align_to(usb_hid_status, usb, LV_ALIGN_BOTTOM_LEFT, 2, -7);
 
+#if IS_ENABLED(CONFIG_ZMK_SPLIT_ESB) && !IS_ENABLED(CONFIG_ZMK_BLE)
+    /* ESB-only dongle: show the word "ESB" instead of the Bluetooth icon.
+     * The BLE profile number / status are meaningless here, so they stay hidden
+     * (the objects are still created to keep the child indices stable). */
+    lv_obj_t *bt = lv_label_create(widget->obj);
+    lv_label_set_text(bt, "ESB");
+    lv_obj_align_to(bt, usb, LV_ALIGN_OUT_RIGHT_TOP, 4, 3);
+
+    lv_obj_t *bt_number = lv_img_create(widget->obj);
+    lv_obj_align_to(bt_number, bt, LV_ALIGN_OUT_RIGHT_TOP, 2, 4);
+    lv_obj_add_flag(bt_number, LV_OBJ_FLAG_HIDDEN);
+
+    lv_obj_t *bt_status = lv_img_create(widget->obj);
+    lv_obj_align_to(bt_status, bt, LV_ALIGN_OUT_RIGHT_TOP, 2, 0);
+    lv_obj_add_flag(bt_status, LV_OBJ_FLAG_HIDDEN);
+#else
     lv_obj_t *bt = lv_img_create(widget->obj);
     lv_obj_align_to(bt, usb, LV_ALIGN_OUT_RIGHT_TOP, 6, 0);
     lv_img_set_src(bt, &sym_bt);
@@ -216,6 +232,7 @@ int zmk_widget_output_status_init(struct zmk_widget_output_status *widget, lv_ob
 
     lv_obj_t *bt_status = lv_img_create(widget->obj);
     lv_obj_align_to(bt_status, bt, LV_ALIGN_OUT_RIGHT_TOP, 2, 1);
+#endif
     
     static lv_style_t style_line;
     lv_style_init(&style_line);

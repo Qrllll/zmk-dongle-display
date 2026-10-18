@@ -26,6 +26,13 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
     #define SOURCE_OFFSET 0
 #endif
 
+#if !defined(ZMK_SPLIT_BLE_PERIPHERAL_COUNT) && IS_ENABLED(CONFIG_ZMK_SPLIT_ESB)
+/* ESB transport: one battery row per pipe declared under esb_link/peripherals.
+ * The ESB module raises zmk_peripheral_battery_state_changed with source = pipe index. */
+#  define ZMK_SPLIT_BLE_PERIPHERAL_COUNT \
+      DT_CHILD_NUM_STATUS_OKAY(DT_CHILD(DT_COMPAT_GET_ANY_STATUS_OKAY(zmk_split_esb), peripherals))
+#endif
+
 #ifndef ZMK_SPLIT_BLE_PERIPHERAL_COUNT
 #  define ZMK_SPLIT_BLE_PERIPHERAL_COUNT 0
 #endif

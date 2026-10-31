@@ -23,7 +23,7 @@ static int64_t last_wpm_update_time = 0;
 /* Keys per second = key presses seen in the last KPS_WINDOW_MS. */
 #define KPS_WINDOW_MS 1000
 #define KPS_REFRESH_MS 250
-#define KPS_RING_SIZE 32
+#define KPS_RING_SIZE 200 /* also the maximum KPS that can be shown */
 
 static uint32_t press_times[KPS_RING_SIZE];
 static uint8_t press_head;

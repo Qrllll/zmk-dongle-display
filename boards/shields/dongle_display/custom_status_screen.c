@@ -63,7 +63,7 @@ lv_obj_t *zmk_display_status_screen() {
 
 #if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_WPM)
     zmk_widget_wpm_status_init(&wpm_status_widget, screen);
-    lv_obj_align_to(zmk_widget_wpm_status_obj(&wpm_status_widget), zmk_widget_output_status_obj(&output_status_widget), LV_ALIGN_OUT_RIGHT_MID, 7, 0);
+    lv_obj_align_to(zmk_widget_wpm_status_obj(&wpm_status_widget), zmk_widget_output_status_obj(&output_status_widget), LV_ALIGN_OUT_BOTTOM_LEFT, 1, 3);
 #endif
 
 #if IS_ENABLED(CONFIG_ZMK_DONGLE_DISPLAY_BONGO_CAT)

@@ -1,4 +1,6 @@
 #include <zephyr/kernel.h>
+#include <string.h>
+#include <stdio.h>
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
@@ -6,24 +8,64 @@ LOG_MODULE_DECLARE(zmk, CONFIG_ZMK_LOG_LEVEL);
 #include <zmk/display.h>
 #include <zmk/event_manager.h>
 #include <zmk/events/wpm_state_changed.h>
+#include <zmk/events/position_state_changed.h>
 #include <zmk/display/widgets/layer_status.h>
 #include <zmk/endpoints.h>
 #include <zmk/keymap.h>
 
 #include "wpm_status.h"
 
-LV_IMG_DECLARE(sym_speedometer);
-
 static sys_slist_t widgets = SYS_SLIST_STATIC_INIT(&widgets);
 static int last_wpm = -1;
 static int64_t last_wpm_update_time = 0;
 #define WPM_UPDATE_INTERVAL_MS 250  // Throttle: max 4 updates per second
+
+/* Keys per second = key presses seen in the last KPS_WINDOW_MS. */
+#define KPS_WINDOW_MS 1000
+#define KPS_REFRESH_MS 250
+#define KPS_RING_SIZE 32
+
+static uint32_t press_times[KPS_RING_SIZE];
+static uint8_t press_head;
+static struct k_spinlock press_lock;
 
 struct wpm_status_state
 {
     int wpm;
     const char *layer;
 };
+
+static int kps_listener(const zmk_event_t *eh)
+{
+    const struct zmk_position_state_changed *ev = as_zmk_position_state_changed(eh);
+    if (ev != NULL && ev->state) {
+        k_spinlock_key_t key = k_spin_lock(&press_lock);
+        press_times[press_head] = k_uptime_get_32();
+        press_head = (press_head + 1) % KPS_RING_SIZE;
+        k_spin_unlock(&press_lock, key);
+    }
+    return ZMK_EV_EVENT_BUBBLE;
+}
+
+ZMK_LISTENER(widget_kps_counter, kps_listener);
+ZMK_SUBSCRIPTION(widget_kps_counter, zmk_position_state_changed);
+
+static int current_kps(void)
+{
+    uint32_t now = k_uptime_get_32();
+    int count = 0;
+
+    k_spinlock_key_t key = k_spin_lock(&press_lock);
+    for (int i = 0; i < KPS_RING_SIZE; i++) {
+        /* Unused slots are 0; guard so boot time doesn't count them. */
+        if (press_times[i] != 0 && (now - press_times[i]) <= KPS_WINDOW_MS) {
+            count++;
+        }
+    }
+    k_spin_unlock(&press_lock, key);
+
+    return count;
+}
 
 static struct wpm_status_state get_state(const zmk_event_t *_eh)
 {
@@ -54,12 +96,12 @@ static void set_wpm(struct zmk_widget_wpm_status *widget, struct wpm_status_stat
     // NULL check for layer name before strstr to prevent crash
     if (state.layer != NULL &&
         strstr(CONFIG_ZMK_DONGLE_DISPLAY_WPM_DISABLED_LAYERS, state.layer) != NULL) {
-        lv_label_set_text(widget->wpm_label, "-");
+        lv_label_set_text(widget->wpm_label, "- WPM");
         return;
     }
 
-    char wpm_text[12];
-    snprintf(wpm_text, sizeof(wpm_text), "%i", state.wpm);
+    char wpm_text[16];
+    snprintf(wpm_text, sizeof(wpm_text), "%i WPM", state.wpm);
     lv_label_set_text(widget->wpm_label, wpm_text);
 }
 
@@ -76,19 +118,45 @@ ZMK_DISPLAY_WIDGET_LISTENER(widget_wpm_status, struct wpm_status_state,
                             wpm_status_update_cb, get_state)
 ZMK_SUBSCRIPTION(widget_wpm_status, zmk_wpm_state_changed);
 
+/* Runs inside LVGL's own timer handler (display thread), so it may touch labels. */
+static void kps_refresh_timer_cb(lv_timer_t *timer)
+{
+    ARG_UNUSED(timer);
+    static int shown_kps = -1;
+
+    int kps = current_kps();
+    if (kps == shown_kps) {
+        return;
+    }
+    shown_kps = kps;
+
+    char kps_text[16];
+    snprintf(kps_text, sizeof(kps_text), "%i KPS", kps);
+
+    struct zmk_widget_wpm_status *widget;
+    SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node)
+    {
+        lv_label_set_text(widget->kps_label, kps_text);
+    }
+}
+
 int zmk_widget_wpm_status_init(struct zmk_widget_wpm_status *widget, lv_obj_t *parent)
 {
     widget->obj = lv_obj_create(parent);
     lv_obj_set_size(widget->obj, LV_SIZE_CONTENT, LV_SIZE_CONTENT);
 
-    lv_obj_t *speedometer = lv_img_create(widget->obj);
-    lv_obj_align(speedometer, LV_ALIGN_TOP_LEFT, 0, 0);
-    lv_img_set_src(speedometer, &sym_speedometer);
-
+    /* Two stacked lines:  "68 WPM" / "11 KPS" */
     widget->wpm_label = lv_label_create(widget->obj);
-    lv_obj_align_to(widget->wpm_label, speedometer, LV_ALIGN_OUT_RIGHT_MID, 2, 1);
+    lv_label_set_text(widget->wpm_label, "0 WPM");
+    lv_obj_align(widget->wpm_label, LV_ALIGN_TOP_LEFT, 0, 0);
+
+    widget->kps_label = lv_label_create(widget->obj);
+    lv_label_set_text(widget->kps_label, "0 KPS");
+    lv_obj_align_to(widget->kps_label, widget->wpm_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 1);
 
     sys_slist_append(&widgets, &widget->node);
+
+    lv_timer_create(kps_refresh_timer_cb, KPS_REFRESH_MS, NULL);
 
     widget_wpm_status_init();
     return 0;

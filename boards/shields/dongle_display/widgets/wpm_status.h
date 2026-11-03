@@ -15,6 +15,7 @@ struct zmk_widget_wpm_status
     lv_obj_t *obj;
     lv_obj_t *wpm_label;
     lv_obj_t *kps_label;
+    lv_obj_t *bpm_label;
 };
 
 int zmk_widget_wpm_status_init(struct zmk_widget_wpm_status *widget, lv_obj_t *parent);

@@ -208,11 +208,11 @@ int zmk_widget_output_status_init(struct zmk_widget_output_status *widget, lv_ob
     lv_obj_align_to(usb_hid_status, usb, LV_ALIGN_BOTTOM_LEFT, 2, -7);
 
 #if IS_ENABLED(CONFIG_ZMK_SPLIT_ESB) && !IS_ENABLED(CONFIG_ZMK_BLE)
-    /* ESB-only dongle: show the word "ESB" instead of the Bluetooth icon.
+    /* ESB-only dongle: show a text label ("Qr's KB") instead of the Bluetooth icon.
      * The BLE profile number / status are meaningless here, so they stay hidden
      * (the objects are still created to keep the child indices stable). */
     lv_obj_t *bt = lv_label_create(widget->obj);
-    lv_label_set_text(bt, "ESB");
+    lv_label_set_text(bt, "Qr's KB");
     lv_obj_align_to(bt, usb, LV_ALIGN_OUT_RIGHT_TOP, 4, 3);
 
     lv_obj_t *bt_number = lv_img_create(widget->obj);

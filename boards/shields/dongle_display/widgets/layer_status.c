@@ -62,6 +62,9 @@ int zmk_widget_layer_status_init(struct zmk_widget_layer_status *widget, lv_obj_
     lv_obj_set_width(widget->obj, CONFIG_ZMK_DONGLE_DISPLAY_LAYER_NAME_SCROLL_WIDTH);
     lv_label_set_long_mode(widget->obj, LV_LABEL_LONG_SCROLL_CIRCULAR);
 
+    // Larger font (8x16) for the layer name; the rest of the screen stays 8x8
+    lv_obj_set_style_text_font(widget->obj, &lv_font_unscii_16, 0);
+
     // Set text alignment based on config
     if (strcmp(CONFIG_ZMK_DONGLE_DISPLAY_LAYER_TEXT_ALIGN, "right") == 0) {
         lv_obj_set_style_text_align(widget->obj, LV_TEXT_ALIGN_RIGHT, 0);

@@ -67,15 +67,16 @@ static int current_kps(void)
     return count;
 }
 
-/* BPM = tempo of your recent key presses, like tap-tempo: the average gap between the
- * last few presses, converted to beats per minute. A pause longer than BPM_MAX_GAP_MS
- * ends the run (and shows 0). Presses closer than BPM_CHORD_MS count as one beat so
- * chords and rollover don't inflate the tempo. */
+/* BPM = streaming speed of your recent key presses, osu!speed style: the average gap
+ * between the last few presses, converted with 4 presses = 1 beat (1/4 notes), so
+ * 10 presses per second reads 150 BPM. A pause longer than BPM_MAX_GAP_MS ends the
+ * run (and shows 0). Presses closer than BPM_CHORD_MS count as one so chords and
+ * rollover don't inflate the number. */
 #define BPM_MAX_BEATS 8
 #define BPM_MIN_BEATS 3
 #define BPM_MAX_GAP_MS 1500
 #define BPM_CHORD_MS 40
-#define BPM_PRESSES_PER_BEAT 1 /* 2 = treat every second press as a beat, etc. */
+#define BPM_PRESSES_PER_BEAT 4 /* osu! convention: 4 presses (1/4 notes) per beat */
 
 static int current_bpm(void)
 {

@@ -67,57 +67,6 @@ static int current_kps(void)
     return count;
 }
 
-/* BPM = streaming speed of your recent key presses, osu!speed style: the average gap
- * between the last few presses, converted with 4 presses = 1 beat (1/4 notes), so
- * 10 presses per second reads 150 BPM. A pause longer than BPM_MAX_GAP_MS ends the
- * run (and shows 0). Presses closer than BPM_CHORD_MS count as one so chords and
- * rollover don't inflate the number. */
-#define BPM_MAX_BEATS 8
-#define BPM_MIN_BEATS 3
-#define BPM_MAX_GAP_MS 1500
-#define BPM_CHORD_MS 40
-#define BPM_PRESSES_PER_BEAT 4 /* osu! convention: 4 presses (1/4 notes) per beat */
-
-static int current_bpm(void)
-{
-    uint32_t now = k_uptime_get_32();
-    uint32_t beats[BPM_MAX_BEATS];
-    int n = 0;
-
-    k_spinlock_key_t key = k_spin_lock(&press_lock);
-    uint8_t idx = press_head;
-    for (int i = 0; i < KPS_RING_SIZE && n < BPM_MAX_BEATS; i++) {
-        idx = (idx + KPS_RING_SIZE - 1) % KPS_RING_SIZE;
-        uint32_t t = press_times[idx];
-        if (t == 0) {
-            break;
-        }
-        if (n == 0) {
-            if ((now - t) > BPM_MAX_GAP_MS) {
-                break;
-            }
-        } else {
-            uint32_t gap = beats[n - 1] - t;
-            if (gap < BPM_CHORD_MS) {
-                continue;
-            }
-            if (gap > BPM_MAX_GAP_MS) {
-                break;
-            }
-        }
-        beats[n++] = t;
-    }
-    k_spin_unlock(&press_lock, key);
-
-    if (n < BPM_MIN_BEATS) {
-        return 0;
-    }
-
-    uint32_t span = beats[0] - beats[n - 1];
-    int bpm = (int)((60000UL * (n - 1) + span / 2) / span) / BPM_PRESSES_PER_BEAT;
-    return bpm > 999 ? 999 : bpm;
-}
-
 static struct wpm_status_state get_state(const zmk_event_t *_eh)
 {
     const struct zmk_wpm_state_changed *ev = as_zmk_wpm_state_changed(_eh);
@@ -174,31 +123,21 @@ static void kps_refresh_timer_cb(lv_timer_t *timer)
 {
     ARG_UNUSED(timer);
     static int shown_kps = -1;
-    static int shown_bpm = -1;
 
     int kps = current_kps();
-    int bpm = current_bpm();
-    if (kps == shown_kps && bpm == shown_bpm) {
+    if (kps == shown_kps) {
         return;
     }
+    shown_kps = kps;
 
     char kps_text[16];
-    char bpm_text[16];
     snprintf(kps_text, sizeof(kps_text), "%i KPS", kps);
-    snprintf(bpm_text, sizeof(bpm_text), "%i BPM", bpm);
 
     struct zmk_widget_wpm_status *widget;
     SYS_SLIST_FOR_EACH_CONTAINER(&widgets, widget, node)
     {
-        if (kps != shown_kps) {
-            lv_label_set_text(widget->kps_label, kps_text);
-        }
-        if (bpm != shown_bpm) {
-            lv_label_set_text(widget->bpm_label, bpm_text);
-        }
+        lv_label_set_text(widget->kps_label, kps_text);
     }
-    shown_kps = kps;
-    shown_bpm = bpm;
 }
 
 int zmk_widget_wpm_status_init(struct zmk_widget_wpm_status *widget, lv_obj_t *parent)
@@ -214,10 +153,6 @@ int zmk_widget_wpm_status_init(struct zmk_widget_wpm_status *widget, lv_obj_t *p
     widget->kps_label = lv_label_create(widget->obj);
     lv_label_set_text(widget->kps_label, "0 KPS");
     lv_obj_align_to(widget->kps_label, widget->wpm_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 1);
-
-    widget->bpm_label = lv_label_create(widget->obj);
-    lv_label_set_text(widget->bpm_label, "0 BPM");
-    lv_obj_align_to(widget->bpm_label, widget->kps_label, LV_ALIGN_OUT_BOTTOM_LEFT, 0, 1);
 
     sys_slist_append(&widgets, &widget->node);
 
